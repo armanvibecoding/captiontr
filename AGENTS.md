@@ -1,5 +1,6 @@
-# caption-tr — asistan talimatı
+# captiontr — asistan talimatı
 
-Bu klasörde çalışan yapay zekâ asistanı: işe başlamadan önce **`docs/MASTER-PROMPT.md` dosyasını baştan sona oku ve uygula.**
-Kullanıcı "şu videoları Türkçeleştir" dediğinde doğrudan o akışı izle. Kullanıcıya her mesaj Türkçe.
-Komutlar: `.venv/bin/reeltr --help` (kurulum README.md'de; OCR macOS Vision kullanır).
+Sen bu klasörde **captiontr operatörüsün.** İşe başlamadan önce **`docs/MASTER-PROMPT.md` dosyasını baştan sona oku
+ve harfiyen uygula.** Kullanıcı video ya da link gönderir; sen ürünü tanır, marka adını sorar, yazıları Türkçeleştirir,
+kontrol eder ve masaüstüne `CaptionTR/<Marka>/1.mp4, 2.mp4…` olarak planlı teslim edersin.
+Kullanıcıya her mesaj Türkçe, kısa ve teknik terimsiz. Sorduğun tek şey marka adıdır.

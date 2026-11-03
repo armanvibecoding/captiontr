@@ -1,58 +1,80 @@
-# caption-tr
+# captiontr
 
 Kısa dikey videolardaki (Reels / TikTok / Shorts) **ekrana gömülü yazıları bulur, siler ve aynı stilde
 Türkçesini basar.** Çıktının metadata'sını temizler ve temizliği doğrular. macOS'ta çalışır.
 
-> *English:* caption-tr localizes burned-in captions on short vertical videos. It finds the on-screen text with
+> *English:* captiontr localizes burned-in captions on short vertical videos. It finds the on-screen text with
 > Apple Vision OCR, removes it (temporal background fill / TELEA / cover box), re-renders the translation in the
 > same style (font size, weight, outline, boxed captions, emoji), and strips container + bitstream metadata.
 
-```
-indir ──► analiz (OCR) ──► çeviri (insan / yapay zekâ) ──► cevir (render) ──► dogrula + gözle kontrol
+## Nasıl kullanılır (yapay zekâ asistanıyla — önerilen)
+
+Klasörü Mac'te **Codex CLI**, Claude Code ya da Gemini CLI ile aç ve videoları (dosya ya da link) gönder.
+`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` asistanı [`docs/MASTER-PROMPT.md`](docs/MASTER-PROMPT.md)'deki çalışma
+sistemine bağlar:
+
+1. **Ürünü tanır, marka adını sorar.** Farklı ürünleri ayırır ("2 farklı ürün var, marka adları ne?"); sohbette
+   sonradan yeni bir ürün gelirse "bu farklı bir ürün, marka adı ne?" der. Bilinen ürünü sormadan markasına ekler.
+2. Yazıları siler, Türkçesini aynı stilde basar, her videoyu kontrol eder.
+3. **Masaüstüne teslim eder:** `~/Desktop/CaptionTR/<Marka>/1.mp4, 2.mp4, 3.mp4…` + paylaşım planı `plan.csv`
+   (tarih, saat, açıklama, hashtag). Numara ve takvim her teslimde kaldığı yerden devam eder.
+
+Kullanıcıya sorulan tek şey marka adıdır; teknik ayrıntı konuşulmaz.
+
+```bash
+cd captiontr && codex
+# "Bu videoları Türkçeleştir: ~/Downloads/videolar/"
 ```
 
-## Ne yapar
+## Komutlar
+
+```
+ekle ──► marka ──► analiz ──► çeviri (asistan) ──► cevir ──► dogrula ──► teslim
+```
 
 | Adım | Komut | Sonuç |
 |---|---|---|
-| İndir | `reeltr indir liste.csv is/proje` | yt-dlp ile en iyi kalite `kaynak.mp4` + `meta.json`, metadata temizlenmiş |
-| Ön seçim | `reeltr bilgi liste.csv aday.csv` | İndirmeden süre / beğeni / izlenme tablosu |
-| Tekrar avı | `reeltr tekrar is/proje` · `reeltr temas is/proje x.jpg` | Aynı çekimi içeren videolar (dHash) · kontrol için kare kolajı |
-| Analiz | `reeltr analiz is/proje` | OCR: yazılar, zamanları, satır kutuları, stil → taslak `ayar.json` + `tablo.png` |
-| Çeviri | `ayar.json` → `satirlar` | Türkçe satırlar elle ya da yapay zekâ asistanıyla doldurulur, `"cevrildi": true` |
-| Render | `reeltr cevir is/proje` | Eski yazı silinir, yenisi basılır → `TR.mp4` + `TR_kontrol.png` |
-| Doğrulama | `reeltr dogrula is/proje` | Çıktıda eski yazıdan OCR'la okunabilen iz var mı |
-| Metadata | `reeltr temizle <dosya/klasör>` | Herhangi bir videonun metadata'sını siler, kalan izi raporlar |
-| Plan | `reeltr plan is/proje teslim/ --baslangic 2026-11-10` | Sıralı dosyalar + `plan.csv` / `plan.xlsx` (tarih, saat, açıklama) |
-| Durum | `reeltr durum is/proje` | Hangi video hangi aşamada |
+| Ekle | `captiontr ekle <dosya/klasör/link…>` | Her video `is/<ad>-<kod>/kaynak.mp4` (metadata temiz) + `onizleme.jpg`; aynı dosya iki kez eklenmez |
+| Marka | `captiontr marka <video…> --ad Lumo --urun "gece lambası"` | Videoyu markaya bağlar; yeni marka `is/markalar.json`'a kaydedilir |
+| Markalar | `captiontr markalar` | Kayıtlı markalar + markası atanmamış videolar |
+| Analiz | `captiontr analiz` | OCR: yazılar, zamanları, satır kutuları, stil → taslak `ayar.json` + `tablo.png` |
+| Çeviri | `ayar.json` → `satirlar`, `gonderi` | Türkçe satırlar + paylaşım açıklaması, `"cevrildi": true` |
+| Render | `captiontr cevir` | Eski yazı silinir, yenisi basılır → `TR.mp4` + `TR_kontrol.png` |
+| Doğrulama | `captiontr dogrula` | Çıktıda eski yazıdan okunabilen iz var mı |
+| Teslim | `captiontr teslim [--baslangic 2026-12-01] [--saat 10:00,18:00]` | `~/Desktop/CaptionTR/<Marka>/N.mp4` + `plan.csv` (varsayılan: yarından itibaren marka başına günde 1, 18:00) |
+| Metadata | `captiontr temizle <dosya/klasör>` | Herhangi bir videonun metadata'sını siler, kalan izi raporlar |
+| Durum | `captiontr durum` | Hangi video hangi aşamada, markası, teslim yeri |
+| Toplu indirme | `captiontr indir liste.csv` · `captiontr bilgi liste.csv aday.csv` | CSV'den indirme · indirmeden izlenme/beğeni |
+| Tekrar avı | `captiontr tekrar` · `captiontr temas x.jpg` | Aynı çekimi içeren videolar (dHash) · kare kolajı |
+
+Çalışma alanı varsayılan `is/`; başka bir klasör için komutun sonuna yolu yaz.
 
 ## Kurulum (macOS, Apple Silicon ya da Intel)
 
 ```bash
-git clone https://github.com/armanvibecoding/caption-tr && cd caption-tr
+git clone https://github.com/armanvibecoding/captiontr && cd captiontr
 uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -e ".[dev]"
-.venv/bin/reeltr --help
+.venv/bin/captiontr --help
 .venv/bin/python -m pytest -q
 ```
 
 - ffmpeg ayrıca kurulmaz, `imageio-ffmpeg` paketinden gelir.
 - OCR için macOS Vision çerçevesi kullanılır (`pyobjc-framework-Vision`). Render ve testler OCR gerektirmez.
 - 8 GB RAM yeterli: render iki geçişli ve akışlıdır (1080p 25 sn ≈ 1 GB).
+- Telefon videosundaki döndürme bilgisi `ekle` sırasında görüntüye uygulanır (yalnız o durumda yeniden kodlanır).
 
-## Liste ve klasör yapısı
-
-```csv
-urun,url
-ornek,https://www.instagram.com/reel/XXXXXXXXXXX/
-```
+## Klasör yapısı
 
 ```
-is/<proje>/
-  proje.json                 # tüm videolara uygulanan ortak ayar (ör. son_yazi)
-  <urun>-<kod>/
-    kaynak.mp4  meta.json    # indir
-    ayar.json   tablo.png    # analiz (+ çeviri)
-    TR.mp4      TR_kontrol.png   # cevir
+is/
+  markalar.json              # marka → ürün tanımı + önizleme
+  proje.json                 # tüm videolara ortak ayar (ör. son_yazi), isteğe bağlı
+  <ad>-<kod>/
+    kaynak.mp4  meta.json  onizleme.jpg   # ekle (+ marka, teslim bilgisi meta.json'da)
+    ayar.json   tablo.png                 # analiz (+ çeviri)
+    TR.mp4      TR_kontrol.png            # cevir
+~/Desktop/CaptionTR/<Marka>/
+  1.mp4  2.mp4  …  plan.csv               # teslim
 ```
 
 `is/`, `*.mp4` ve indirilen emoji görselleri git'e girmez.
@@ -84,7 +106,7 @@ Elle ezilebilen alanlar (`ayar.json`): `font_px`, `agirlik`, `kenar_px`, `font` 
 | `"kapak": "satir"` | Yazının arkasına satır boyunda yarı saydam koyu kutu | Yazı el/yüz üstündeyse, en güvenli teslim |
 | `"maske": "hassas"` | Silme maskesini pikselin zaman içindeki oynaklığından ölçer (kenar, yumuşatma, gölge) | İnce kenarlı / gölgeli yazı |
 
-Maske kalitesi ölçülebilir: `python -m reeltr.maske_olc uret|olc` gerçek videolara **bilinen** yazı basar ve
+Maske kalitesi ölçülebilir: `python -m captiontr.maske_olc uret|olc` gerçek videolara **bilinen** yazı basar ve
 maskenin kaçırdığı / fazladan sildiği pikselleri sayar.
 
 ### Denenip bırakılanlar
@@ -113,12 +135,6 @@ adları sıkıştırılmış veride tesadüfen geçebildiği için yalnız `mdat
 
 Döndürme bilgisi (`displaymatrix`) olan video temizlenmez, hata verir — temizlik yönü bozabilir.
 
-## Yapay zekâ asistanıyla kullanım
-
-`CLAUDE.md`, `AGENTS.md` ve `GEMINI.md` asistanı [`docs/MASTER-PROMPT.md`](docs/MASTER-PROMPT.md)'ye yönlendirir:
-akış, silme yöntemi karar tablosu, çeviri kuralları (yerelleştirme kalıpları, Türkçe karakter, sağlık iddiası) ve
-kontrol listesi orada. Klasörde asistanı açıp *"is/proje klasöründeki videoları Türkçeleştir"* demek yeterli.
-
 ## Sınırlar
 
 - Yazının beyaz ya da beyaz kutulu olduğu varsayılır; renkli yazıda analiz uyarı verir.
@@ -135,5 +151,5 @@ hakkını ve platform kurallarını ihlal edebilir; sorumluluk kullanıcıdadır
 
 ## Lisans
 
-Kod: [MIT](LICENSE). Font: TikTok Sans, [SIL Open Font License 1.1](reeltr/varliklar/OFL.txt).
+Kod: [MIT](LICENSE). Font: TikTok Sans, [SIL Open Font License 1.1](captiontr/varliklar/OFL.txt).
 Emoji görselleri depoda yoktur; ilk kullanımda `emoji-datasource-apple` paketinden indirilir ve kendi lisansına tabidir.

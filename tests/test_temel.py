@@ -7,7 +7,7 @@ import os, subprocess
 import cv2, numpy as np, pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from reeltr import cevir, ortak
+from captiontr import cevir, ortak
 
 W, H, FPS, SURE = 360, 640, 20, 4.0
 Y0, Y1 = 150, 260
@@ -95,7 +95,7 @@ def test_metadata_temizligi(video):
 
 
 def test_tekrar_tespiti(video):
-    from reeltr import sec
+    from captiontr import sec
     a = sec.parmak_izi(str(video / "kaynak.mp4"))
     b = sec.parmak_izi(str(video / "TR.mp4"))          # aynı çekim, farklı altyazı
     assert sec.benzerlik(a, b) >= sec.ORTAK_PAY
@@ -221,7 +221,7 @@ def test_kapak_silinen_alani_orter(video):
 def test_hassas_maske_gorunur_her_pikseli_kapsar_fazlasi_az():
     """Oynayan arka planda beyaz+siyah kenarlı yazı: maske yazının görünür (|yazılı − temiz| > 12) HER pikselini
     kapsamalı (iz kalmasın) ve fazladan boyadığı alan yazı alanını aşmamalı (leke kaynağı küçük kalsın)."""
-    from reeltr import maske
+    from captiontr import maske
     kareler = [arka_plan(i) for i in range(20, 60, 2)]
     yazili = [yazi_bas(f, "Hello world") for f in kareler]
     bant = slice(Y0, Y1)

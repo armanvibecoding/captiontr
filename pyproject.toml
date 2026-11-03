@@ -1,5 +1,5 @@
 [project]
-name = "caption-tr"
+name = "captiontr"
 version = "0.2.0"
 description = "Kısa dikey videolardaki gömülü yazıları bul, sil ve aynı stilde Türkçesini bas; metadata'yı temizle"
 readme = "README.md"
@@ -18,20 +18,20 @@ dependencies = [
 dev = ["pytest>=8"]
 
 [project.urls]
-Repository = "https://github.com/armanvibecoding/caption-tr"
+Repository = "https://github.com/armanvibecoding/captiontr"
 
 [project.scripts]
-reeltr = "reeltr.__main__:main"
+captiontr = "captiontr.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["reeltr"]
+packages = ["captiontr"]
 
 [tool.setuptools.package-data]
-reeltr = ["varliklar/*.ttf", "varliklar/OFL.txt"]
+captiontr = ["varliklar/*.ttf", "varliklar/OFL.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

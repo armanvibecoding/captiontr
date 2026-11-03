@@ -7,7 +7,7 @@
       kutularını bulmak.
 - [ ] **Sıkıştırma adımı:** yükleme için hedef boyuta yeniden kodlama (`ses copy`) + ardından otomatik temizlik ve rapor.
 - [ ] **Döndürme bilgisi:** `displaymatrix` olan videoda görüntüyü fiziksel döndürüp sonra temizlemek (şu an hata verir).
-- [ ] **Toplu rapor:** `reeltr temizle --rapor` → dosya başına temiz/kirli tablosu.
+- [ ] **Toplu rapor:** `captiontr temizle --rapor` → dosya başına temiz/kirli tablosu.
 
 ## Silme kalitesi (8 GB RAM sınırı içinde)
 - [ ] `zamansal`: tek homografi yerine yerel (blok) hizalama + kaynak kare ile hedef kare arasında renk/ışık eşitleme.

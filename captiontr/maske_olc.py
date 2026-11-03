@@ -1,7 +1,7 @@
 """Maske ölçüm düzeneği: gerçek videolara BİLİNEN yazı basılır, maskenin kaçırdığı ve fazladan sildiği piksel ölçülür.
 
-  python -m reeltr.maske_olc uret <cikti_klasor> <kaynak_klasor>...   → her kaynak × stil için sentetik video + doğru cevap
-  python -m reeltr.maske_olc olc <cikti_klasor>                       → OCR + maske + karne
+  python -m captiontr.maske_olc uret <cikti_klasor> <kaynak_klasor>...   → her kaynak × stil için sentetik video + doğru cevap
+  python -m captiontr.maske_olc olc <cikti_klasor>                       → OCR + maske + karne
 
 Doğru cevap kare kare bilinir (yazı katmanının alfası + yazısız orijinal kare), yani:
   kaçan  = yazının görünür (|yazılı − temiz| > GORUNUR) pikseli maskede değil → silinmeden kalan iz

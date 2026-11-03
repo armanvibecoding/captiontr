@@ -3,7 +3,7 @@
 Çıktı (video klasörüne):
   tablo.png  — saniye etiketli kare tablosu (y cetvelli), gözle kontrol için
   ayar.json  — bant, her yazının zamanı/örnek anı/orijinal metni; "satirlar" BOŞ bırakılır,
-               çeviriyi Claude (veya insan) doldurur → sonra `reeltr cevir`.
+               çeviriyi Claude (veya insan) doldurur → sonra `captiontr cevir`.
 Emojiler OCR'da okunmaz; tablo.png'ye bakıp çeviriye eklenir.
 Mevcut ve çevirisi doldurulmuş ayar.json'un üstüne yazılmaz (--zorla hariç).
 """

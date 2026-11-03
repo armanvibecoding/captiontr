@@ -8,7 +8,7 @@ ayar.json (bkz. analiz.py — taslağı otomatik üretir):
 }
 İsteğe bağlı: "font_px", "kenar_px" (varsayılan 1.6 px @576 genişlik, orantılı), "hizala_orijinal".
 
-caption-tr'ye göre farklar:
+captiontr'ye göre farklar:
   * Bellek: kareler belleğe toplanmaz (2 geçişli akış) — 1080p/60 sn video 8 GB makinede çalışır.
   * Yazısız aralıklar: orijinalde yazı olmayan karelere yeni yazı BASILMAZ.
   * Hız: inpaint yalnız yazı bandında yapılır.

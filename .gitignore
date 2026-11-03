@@ -10,7 +10,7 @@ is/
 *.mkv
 *.log
 # ilk kullanımda indirilen emoji görselleri (Apple emoji, ayrı lisans)
-reeltr/varliklar/emoji_png/
+captiontr/varliklar/emoji_png/
 # yerel model dosyaları
 modeller/
 *.pt
