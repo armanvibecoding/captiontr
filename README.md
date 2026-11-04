@@ -1,15 +1,16 @@
 # captiontr
 
-Kısa dikey videolardaki (Reels / TikTok / Shorts) **ekrana gömülü yazıları bulur, siler ve aynı stilde
-Türkçesini basar.** Çıktının metadata'sını temizler ve temizliği doğrular. macOS'ta çalışır.
+Kısa dikey videolardaki (Reels / TikTok / Shorts) **ekrana gömülü yazıları bulur, opak siyah kutuyla
+örter ve Türkçesini orijinal boyda basar**; sona CTA ekler. Çıktının metadata'sını temizler ve temizliği doğrular.
+**macOS, Windows ve Linux'ta çalışır.**
 
-> *English:* captiontr localizes burned-in captions on short vertical videos. It finds the on-screen text with
-> Apple Vision OCR, removes it (temporal background fill / TELEA / cover box), re-renders the translation in the
-> same style (font size, weight, outline, boxed captions, emoji), and strips container + bitstream metadata.
+> *English:* captiontr localizes burned-in captions on short vertical videos. It finds the on-screen text (Apple Vision OCR
+> on macOS, RapidOCR on Windows/Linux), covers it with an opaque black box holding the translation at the original
+> font size and position, appends a mandatory end-screen CTA, and strips container + bitstream metadata.
 
 ## Nasıl kullanılır (yapay zekâ asistanıyla — önerilen)
 
-Klasörü Mac'te **Codex CLI**, Claude Code ya da Gemini CLI ile aç ve videoları (dosya ya da link) gönder.
+Klasörü **Codex CLI**, Claude Code ya da Gemini CLI ile aç ve videoları (dosya ya da link) gönder.
 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` asistanı [`docs/MASTER-PROMPT.md`](docs/MASTER-PROMPT.md)'deki çalışma
 sistemine bağlar:
 
@@ -17,7 +18,8 @@ sistemine bağlar:
    başka kalitede, aynalanmış ya da başka yazıyla gelen aynı video tekrar hazırlanmaz.
 2. **Ürünü tanır, marka adını sorar.** Farklı ürünleri ayırır ("2 farklı ürün var, marka adları ne?"); sohbette
    sonradan yeni bir ürün gelirse "bu farklı bir ürün, marka adı ne?" der. Bilinen ürünü sormadan markasına ekler.
-3. Yazıları siler, Türkçesini aynı stilde basar. **TikTok/Instagram yorum balonlarını** ("…'s comment'e yanıt") Türkçe
+3. Yazının üstünü opak siyah kutuyla kapatır, Türkçesini orijinal boyda ve yerinde beyaz basar; sona zorunlu
+   CTA ekler (CTA'sız video render edilmez). **TikTok/Instagram yorum balonlarını** ("…'s comment'e yanıt") Türkçe
    balonla değiştirir. **Her videoya farklı bir hook** yazar; aynı markada tekrar eden giriş render edilmez.
 4. Her videoyu kontrol eder.
 5. **Masaüstüne teslim eder:** `~/Desktop/CaptionTR/<Marka>/1.mp4, 2.mp4, 3.mp4…` + paylaşım planı `plan.csv`
@@ -55,15 +57,20 @@ ekle (+kopya kontrolü) ──► marka ──► analiz ──► çeviri + hoo
 
 Çalışma alanı varsayılan `is/`; başka bir klasör için komutun sonuna yolu yaz.
 
-## Kurulum (macOS, Apple Silicon ya da Intel)
+## Kurulum (macOS, Windows, Linux)
+
+Tek gereksinim [`uv`](https://docs.astral.sh/uv/). Komutlar her sistemde aynı:
 
 ```bash
 git clone https://github.com/armanvibecoding/captiontr && cd captiontr
-uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -e ".[dev]"
-.venv/bin/captiontr --help
-.venv/bin/python -m pytest -q
+uv run captiontr --help              # ilk çalıştırmada Python + paketler kurulur
+uv run --extra dev pytest -q
 ```
 
+- Yazı okuma: macOS'ta Apple Vision (`pyobjc-framework-Vision`), Windows/Linux'ta RapidOCR (PP-OCR, ONNX, çevrimdışı;
+  ilk kullanımda ~35 MB model indirir). `CAPTIONTR_OCR=rapid` ile macOS'ta da RapidOCR seçilir. 40 gerçek videoda
+  iki motor satırların %95'inde aynı metni ve aynı kutuyu (medyan fark genişliğin %1,5'i) buldu.
+- Teslim klasörü masaüstü (Windows'ta OneDrive masaüstü de bulunur).
 - ffmpeg ayrıca kurulmaz, `imageio-ffmpeg` paketinden gelir.
 - OCR için macOS Vision çerçevesi kullanılır (`pyobjc-framework-Vision`). Render ve testler OCR gerektirmez.
 - 8 GB RAM yeterli: render iki geçişli ve akışlıdır (1080p 25 sn ≈ 1 GB).
@@ -129,14 +136,23 @@ giriş ve çıkış anı kare kare bulunur. `cevir` eski balonu tamamen örten o
 ("<kullanıcı> adlı kullanıcının yorumuna yanıt"), Türkçe yorum ve emoji. Altında silme yapılmadığı için iz kalmaz.
 Kullanıcı adı orijinal kalır; profil resmi yerine nötr gri daire basılır.
 
-## Silme yöntemleri
+## Yazı yöntemi: kapatma (varsayılan, kesin kural)
 
-| `ayar.json` | Ne yapar | Ne zaman |
-|---|---|---|
-| `"silme": "zamansal"` (varsayılan) | Yazının altındaki gerçek görüntüyü komşu karelerden getirir (ORB + RANSAC homografi); dolmayan pikseller TELEA ile kapanır, oran `TR_dolgu.json`'a yazılır | Sabit kamera, yavaş hareket |
-| `"silme": "telea"` | OpenCV TELEA inpaint | Hızlı kamera/özne hareketi |
-| `"kapak": "satir"` | Yazının arkasına satır boyunda yarı saydam koyu kutu | Yazı el/yüz üstündeyse, en güvenli teslim |
-| `"maske": "hassas"` | Silme maskesini pikselin zaman içindeki oynaklığından ölçer (kenar, yumuşatma, gölge) | İnce kenarlı / gölgeli yazı |
+Eski yazı silinmez. Görüldüğü her karede (giriş/çıkış geçişleri ve animasyonlu kareler dahil) tüm piksellerini
+örten tek, tam opak siyah kutu çizilir; Türkçesi içine beyaz, orijinal font boyunda ve orijinal merkezde basılır.
+Testler: eski yazının her pikseli siyah kalır (`test_kapat.py`), aynı metin basılınca harf boyu ve satır genişliği
+orijinalle %8–12 içinde.
+
+CTA zorunludur: `son_yazi.metin` boşsa `cevir` videoyu atlar. CTA siyah kutuda beyaz yazıdır, altyazı şeridine
+binmeyecek yüksekliğe otomatik yerleşir.
+
+### Eski silme yöntemleri (kapalı, yalnız `"yontem": "sil"` ile)
+
+| `ayar.json` | Ne yapar |
+|---|---|
+| `"silme": "zamansal"` | Yazının altındaki gerçek görüntüyü komşu karelerden getirir (ORB + RANSAC homografi); dolmayan pikseller TELEA |
+| `"silme": "telea"` | OpenCV TELEA inpaint |
+| `"maske": "hassas"` | Silme maskesini pikselin zaman içindeki oynaklığından ölçer |
 
 Maske kalitesi ölçülebilir: `python -m captiontr.maske_olc uret|olc` gerçek videolara **bilinen** yazı basar ve
 maskenin kaçırdığı / fazladan sildiği pikselleri sayar.

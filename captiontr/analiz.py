@@ -1,4 +1,4 @@
-"""Videodaki gömülü yazıları OTOMATİK bulur (Apple Vision OCR) ve taslak ayar.json yazar.
+"""Videodaki gömülü yazıları OTOMATİK bulur (macOS'ta Apple Vision, Windows/Linux'ta RapidOCR) ve taslak ayar.json yazar.
 
 Çıktı (video klasörüne):
   tablo.png  — saniye etiketli kare tablosu (y cetvelli), gözle kontrol için
@@ -7,7 +7,7 @@
 Emojiler OCR'da okunmaz; tablo.png'ye bakıp çeviriye eklenir.
 Mevcut ve çevirisi doldurulmuş ayar.json'un üstüne yazılmaz (--zorla hariç).
 """
-import difflib, os, re
+import difflib, os, re, sys
 from collections import Counter
 
 import cv2, numpy as np
@@ -16,7 +16,7 @@ from . import ortak
 from .cevir import govde
 
 ADIM_SN = 0.25        # OCR örnekleme aralığı
-GUVEN = 0.5           # Vision güven eşiği
+GUVEN = 0.5           # OCR güven eşiği
 BEYAZ_PAY = 0.06      # kutudaki beyaz piksel oranı: altyazı beyazdır, ürün/ambalaj yazısı genelde değil
 KUTU_BEYAZ = 0.66     # kutulu: OCR kutusunun çoğu beyaz zemin…
 KUTU_GOVDE = 0.07     # …ve koyu pikseller kalın harf gövdesi (kenarlı yazıda koyu = ince kenar çizgisi)
@@ -31,7 +31,12 @@ def beyaz(b):
     return (hsv[..., 2] > 215) & (hsv[..., 1] < 50)
 
 
-def ocr(kare):
+MOTOR = os.environ.get("CAPTIONTR_OCR") or ("vision" if sys.platform == "darwin" else "rapid")
+_rapid = None
+
+
+def _ham_vision(kare):
+    """macOS Vision: [(metin, güven, x0, y0, w, h)]."""
     import Vision
     from Foundation import NSData
     ok, buf = cv2.imencode(".png", kare)
@@ -40,20 +45,39 @@ def ocr(kare):
     istek.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
     istek.setUsesLanguageCorrection_(False)
     Vision.VNImageRequestHandler.alloc().initWithData_options_(veri, None).performRequests_error_([istek], None)
-    H, W = kare.shape[:2]
-    sonuc = []
+    H, W = kare.shape[:2]; sonuc = []
     for o in istek.results() or []:
-        c = o.topCandidates_(1)[0]
-        if c.confidence() < GUVEN: continue
-        bb = o.boundingBox()
-        x0 = int(bb.origin.x * W); w = int(bb.size.width * W)
-        y0 = int((1 - bb.origin.y - bb.size.height) * H); h = int(bb.size.height * H)
+        c = o.topCandidates_(1)[0]; bb = o.boundingBox()
+        sonuc.append((c.string(), float(c.confidence()), int(bb.origin.x * W), int((1 - bb.origin.y - bb.size.height) * H),
+                      int(bb.size.width * W), int(bb.size.height * H)))
+    return sonuc
+
+
+def _ham_rapid(kare):
+    """Windows / Linux: RapidOCR (PP-OCR çok dilli varsayılan model, çevrimdışı) — [(metin, güven, x0, y0, w, h)]."""
+    global _rapid
+    if _rapid is None:
+        from rapidocr import RapidOCR
+        _rapid = RapidOCR(params={"Global.log_level": "error"})
+    r = _rapid(kare); sonuc = []
+    for kutu, metin, guven in zip(r.boxes if r.boxes is not None else [], r.txts or [], r.scores or []):
+        xs, ys = [p[0] for p in kutu], [p[1] for p in kutu]
+        sonuc.append((metin, float(guven), int(min(xs)), int(min(ys)), int(max(xs) - min(xs)), int(max(ys) - min(ys))))
+    return sonuc
+
+
+def ocr(kare, motor=None):
+    """Beyaz (altyazı) yazı satırları, yukarıdan aşağı. motor: 'vision' (macOS) | 'rapid' (her sistem)."""
+    ham = (_ham_vision if (motor or MOTOR) == "vision" else _ham_rapid)(kare)
+    sonuc = []
+    for metin, guven, x0, y0, w, h in ham:
+        if guven < GUVEN: continue
         x0, y0 = max(0, x0), max(0, y0)
         kutu = kare[y0:y0 + h, x0:x0 + w]
         if kutu.size == 0: continue
         oran = float(beyaz(kutu).mean())
         if oran < BEYAZ_PAY: continue
-        metin = c.string().strip()
+        metin = metin.strip()
         if len(re.sub(r"\W", "", metin)) < 2: continue
         koyu = cv2.cvtColor(kutu, cv2.COLOR_BGR2HSV)[..., 2] < 90
         sonuc.append({"metin": metin, "x0": x0, "y0": y0, "x1": x0 + w, "y1": y0 + h, "beyaz": oran,

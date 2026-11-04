@@ -415,7 +415,7 @@ def katman_ciz(satirlar, stil, W, H):
 
 
 def son_yazi_katmani(cfg, W, H):
-    """Videonun sonuna çağrı yazısı (kutulu, ortalı). Çok uzunsa kelimeden 2+ satıra böler."""
+    """Videonun sonuna çağrı yazısı (CTA): siyah kutu, beyaz yazı, ortalı. Çok uzunsa kelimeden 2+ satıra böler."""
     fp = int(cfg.get("font_oran", 0.042) * W)
     font = font_ac(fp, cfg.get("agirlik", 700))
     sinir = 0.84 * W - 2 * 0.45 * fp
@@ -430,7 +430,7 @@ def son_yazi_katmani(cfg, W, H):
     stil = {"tur": "kutulu", "font_px": fp, "agirlik": cfg.get("agirlik", 700), "orta_x": W / 2, "aralik": kutu_y,
             "kutu_y": kutu_y, "pad_x": 0.45 * fp, "yaricap": 0.3,
             "ilk_merkez_y": cfg.get("y_oran", 0.70) * H - (len(satirlar) - 1) * kutu_y / 2,
-            "kutu_renk": tuple(cfg.get("kutu_renk", (255, 255, 255))), "yazi_renk": tuple(cfg.get("yazi_renk", (0, 0, 0)))}
+            "kutu_renk": tuple(cfg.get("kutu_renk", (0, 0, 0))), "yazi_renk": tuple(cfg.get("yazi_renk", (255, 255, 255)))}
     return katman_ciz(satirlar, stil, W, H)
 
 
@@ -513,8 +513,10 @@ def yazilari_hazirla(ayar):
     b = ortak.bilgi(video); FPS, W, H = b["fps"], b["w"], b["h"]
     Y0, Y1 = ayar.get("bant") or (0, 1)
     tur = ayar.get("stil", "kenarli")
+    kapat = yazi_yontemi(ayar) == "kapat"
 
     etiket = [-2] * b["n"]; maske, katman = [None] * len(alt), [None] * len(alt)
+    stiller = [None] * len(alt)
     sil, kare_maske = list(etiket), {}
     if alt:
         idx = [min(b["n"] - 1, int(a["ornek_sn"] * FPS)) for a in alt]
@@ -578,7 +580,7 @@ def yazilari_hazirla(ayar):
             xs = np.nonzero(sabit_beyaz.any(axis=0))[0]
             if alt[k].get("kutular"): xs = np.array([min(q[0] for q in alt[k]["kutular"]), max(q[2] for q in alt[k]["kutular"])])
             if not len(xs): raise RuntimeError(f"{k}. yazıda beyaz yazı pikseli bulunamadı")
-            orta_x = (xs.min() + xs.max()) / 2 if ayar.get("hizala_orijinal") else W / 2
+            orta_x = (xs.min() + xs.max()) / 2 if ayar.get("hizala_orijinal") or kapat else W / 2
             if yazi_tur == "kutulu":
                 dolu = kutu_dolu(sabit_beyaz)
                 m = kutu_maske(dolu, W)
@@ -635,7 +637,9 @@ def yazilari_hazirla(ayar):
                 if siki[k] is not None else kisit
             kalinlik[k] = max(2, round(0.15 * np.median([b2 - a2 for a2, b2 in satir])))
             kp = alt[k].get("kapak", ayar.get("kapak"))
-            if kp == "satir":   # yalnız yazının arkası: satır başına sıkı koyu kutu, font biraz küçük
+            if kapat:
+                pass   # kutu, kare kare maskeler belli olunca aşağıda kurulur
+            elif kp == "satir":   # yalnız yazının arkası: satır başına sıkı koyu kutu, font biraz küçük
                 fs = max(8, stil["font_px"] - ayar.get("kapak_font_eksi", 2))
                 stil.update(tur="kutulu", font_px=fs, kutu_y=fs * 1.32, pad_x=fs * 0.32, yaricap=0.22,
                             ilk_merkez_y=stil.get("ilk_merkez_y", stil.get("ust", 0) + stil["font_px"] * 0.36),
@@ -646,11 +650,36 @@ def yazilari_hazirla(ayar):
                 stil.update(kapak=[int(xs_m.min()), Y0 + int(ys.min()), int(xs_m.max()) + 1, Y0 + int(ys.max()) + 1],
                             kapak_alfa=ayar.get("kapak_alfa", 0.88), yazi_renk=(255, 255, 255))
                 if stil["tur"] == "kutulu": stil["kutu_renk"] = (0, 0, 0)
-            katman[k] = katman_ciz(alt[k]["satirlar"], stil, W, H)
+            stiller[k] = stil
             print(f"  yazı {k} [{yazi_tur}]: {len(satir)}→{len(alt[k]['satirlar'])} satır, font {fp}px, {bilgi}")
         sil, kare_maske = gecis_ve_kare_maskeleri(etiket, maske, beyazlar, kisitlar, kalinlik, gecis, W)
+        for k in range(len(alt)):
+            stil = stiller[k]
+            if kapat: stil = kapat_stili(stil, alt[k], k, maske, sil, kare_maske, Y0)
+            katman[k] = katman_ciz(alt[k]["satirlar"], stil, W, H)
 
     return etiket, maske, katman, sil, kare_maske
+
+
+def yazi_yontemi(ayar):
+    """'kapat' (varsayılan, kesin kural): eski yazı silinmez; tamamen opak siyah kutu + beyaz Türkçe yazı, orijinal
+    font boyunda ve orijinal yerinde. 'sil': eski yazıyı silip aynı stilde basar (eski yöntem, kapalı)."""
+    return "sil" if ayar.get("yontem") == "sil" else "kapat"
+
+
+def kapat_stili(stil, a, k, maske, sil, kare_maske, Y0):
+    """Eski yazının görüldüğü her karedeki tüm piksellerini (+ OCR kutularını) örten tek opak siyah kutu."""
+    m, _, _ = maske[k]; tum = m > 0
+    for i, mk in kare_maske.items():
+        if sil[i] == k: tum = tum | (mk > 0)
+    ys, xs = np.nonzero(tum)
+    x0, y0, x1, y1 = int(xs.min()), Y0 + int(ys.min()), int(xs.max()) + 1, Y0 + int(ys.max()) + 1
+    for q in (a.get("kutular") or []) + (a.get("ek_kutular") or []):
+        x0, y0, x1, y1 = min(x0, q[0]), min(y0, q[1]), max(x1, q[2]), max(y1, q[3])
+    yeni = dict(stil, kapak=[x0, y0, x1, y1], kapak_alfa=1.0, kapak_renk=(0, 0, 0), yazi_renk=(255, 255, 255))
+    if yeni["tur"] == "kutulu":   # orijinal beyaz kutulu yazı: tek siyah kutu içinde, satır kutusu çizilmez
+        yeni.update(tur="kenarli", kenar=0)
+    return yeni
 
 
 def gecis_ve_kare_maskeleri(etiket, maske, beyazlar, kisitlar, kalinlik, gecis, W):
@@ -716,13 +745,17 @@ def cevir(ayar_yol):
 
     son_bas, son_katman = b["n"] + 1, None
     if son:
+        if "y_oran" not in son and ayar.get("bant"):   # CTA altyazı şeridinin üstüne binmesin
+            y0b, y1b = ayar["bant"][0] / H, ayar["bant"][1] / H
+            son = dict(son, y_oran=0.70 if (y1b < 0.62 or y0b > 0.78) else (0.25 if y0b > 0.45 else 0.82))
         son_katman = son_yazi_katmani(son, W, H)
         son_bas = max(0, b["n"] - int(son.get("sure", 2.5) * FPS))
         print(f"  son yazı: {son_bas / FPS:.2f} sn → son  «{son['metin']}»")
 
     # 1,5. geçiş: yazının altındaki gerçek arka planı başka karelerden getir (doldurulamayan = TELEA)
     dolgu, oran = {}, {}
-    if alt and ayar.get("silme", "zamansal") == "zamansal":
+    kapat = yazi_yontemi(ayar) == "kapat"
+    if alt and not kapat and ayar.get("silme", "zamansal") == "zamansal":
         from . import doldur
         dolgu, oran = doldur.hazirla(video, sil, maske, Y0, Y1, kare_maske)
         for k in sorted(oran): print(f"  yazı {k}: arka plan %{oran[k] * 100:.0f} gerçek görüntüyle dolduruldu")
@@ -741,7 +774,9 @@ def cevir(ayar_yol):
     kontrol, son_kontrol = {}, None
     for i, f in ortak.kareler(video):
         k = etiket[i] if i < len(etiket) else -2
-        ms = kare_maskesi(sil, maske, kare_maske, i)
+        if kapat:   # silme yok: eski yazının göründüğü her karede (geçişler dahil) opak kutu basılır
+            k = sil[i] if i < len(sil) else -2; ms = None
+        else: ms = kare_maskesi(sil, maske, kare_maske, i)
         o = f
         yorum_var = [z for z in yk if z[0] <= i < z[1]]
         if ms is not None or i >= son_bas or yorum_var: o = f.copy()
@@ -752,7 +787,7 @@ def cevir(ayar_yol):
         if k >= 0:
             temiz = o[Y0:Y1].copy() if i in kontrol_i else None
             bindir(o, katman[k])
-            if temiz is not None: kontrol[kontrol_i[i]] = np.hstack([f[Y0:Y1], temiz, o[Y0:Y1]])
+            if temiz is not None: kontrol[kontrol_i[i]] = np.hstack([f[Y0:Y1], o[Y0:Y1]] if kapat else [f[Y0:Y1], temiz, o[Y0:Y1]])
         for j, (a0, a1, kat, y) in enumerate(yk):
             if a0 <= i < a1:
                 bindir(o, kat)
@@ -783,6 +818,11 @@ def cevir(ayar_yol):
     return cikti, kp
 
 
+def cta_var(ayar):
+    """Kesin kural: her videonun sonunda ekranda bir çağrı yazısı (CTA) olur."""
+    return bool(((ayar.get("son_yazi") or {}).get("metin") or "").strip())
+
+
 def calistir(hedef, zorla=False):
     """hedef: tek ayar.json ya da proje klasörü (çevirisi dolu ve güncel olmayanları işler)."""
     ortak.utf8()
@@ -802,6 +842,8 @@ def calistir(hedef, zorla=False):
                 print(f"{ad:40} atlandı (çeviri eksik)"); continue
             if ayar.get("cevrildi") is not True:
                 print(f"{ad:40} atlandı (cevrildi: true işaretli değil)"); continue
+            if not cta_var(ayar):
+                print(f"{ad:40} atlandı (CTA eksik: son_yazi.metin yaz — kesin kural)"); hata += 1; continue
             from . import hook
             t = hook.tekrar_eden(os.path.dirname(os.path.abspath(a)), ayar)
             if t and not ayar.get("hook_tekrar_izin"):

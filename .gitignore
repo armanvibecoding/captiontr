@@ -16,3 +16,4 @@ modeller/
 *.pt
 *.pth
 *.onnx
+uv.lock

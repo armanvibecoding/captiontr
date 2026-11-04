@@ -128,7 +128,8 @@ def koyu_bant(f):
 
 def test_kutulu_stil(kutulu_video):
     d = kutulu_video
-    ayar = {"kaynak": str(d / "kaynak.mp4"), "cikti": str(d / "TR.mp4"), "bant": [140, 250], "stil": "kutulu",
+    # eski silme yöntemi (varsayılan artık kapatma): yalnız "yontem": "sil" ile açılır
+    ayar = {"kaynak": str(d / "kaynak.mp4"), "cikti": str(d / "TR.mp4"), "bant": [140, 250], "stil": "kutulu", "yontem": "sil",
             "altyazilar": [{"ornek_sn": 2.0, "orijinal": ["POV: you need", "this gadget"],
                             "kutular": [[int(W / 2 - 90), 162, int(W / 2 + 90), 188], [int(W / 2 - 75), 202, int(W / 2 + 75), 228]],
                             "satirlar": ["Bu alet", "şart"]}]}
@@ -154,7 +155,10 @@ def test_son_yazi_yalniz_sonda(video):
     once = cevir.beyaz(kare(cikti, int((SURE - 2) * FPS))[y]).mean()
     sonda = cevir.beyaz(kare(cikti, int(SURE * FPS) - 3)[y]).mean()
     assert once < 0.01, f"son yazı erken görünüyor: {once}"
-    assert sonda > 0.05, f"son yazı yok: {sonda}"
+    assert sonda > 0.01, f"son yazı yok: {sonda}"
+    # CTA siyah kutu içinde beyaz yazı
+    son = kare(cikti, int(SURE * FPS) - 3)[y]
+    assert (son.max(axis=2) < 25).mean() > 0.05, "CTA siyah kutusu yok"
 
 
 def test_ocr_zaman_araligi_disina_tasmaz(video):

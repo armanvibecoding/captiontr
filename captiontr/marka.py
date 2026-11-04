@@ -21,7 +21,15 @@ from . import aynilik, indir, ortak
 
 ONIZLEME = "onizleme.jpg"
 KAYIT = "markalar.json"
-VARSAYILAN_HEDEF = os.path.expanduser("~/Desktop/CaptionTR")
+def _masaustu():
+    """Masaüstü: macOS/Linux ~/Desktop; Windows'ta OneDrive'a taşınmış masaüstü de olur."""
+    for aday in ("~/Desktop", "~/OneDrive/Desktop", "~/OneDrive/Masaüstü", "~/Masaüstü"):
+        p = os.path.expanduser(aday)
+        if os.path.isdir(p): return p
+    return os.path.expanduser("~/Desktop")
+
+
+VARSAYILAN_HEDEF = os.path.join(_masaustu(), "CaptionTR")
 PLAN = "plan.csv"
 PLAN_ALANLAR = ["sira", "dosya", "tarih", "saat", "aciklama", "hashtag", "kaynak", "not"]
 KOPYALAR = "_kopyalar"     # kopya olduğu onaylanan videolar buraya taşınır (silinmez)

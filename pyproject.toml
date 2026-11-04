@@ -1,6 +1,6 @@
 [project]
 name = "captiontr"
-version = "0.3.0"
+version = "0.4.0"
 description = "Kısa dikey videolardaki gömülü yazıları bul, sil ve aynı stilde Türkçesini bas; metadata'yı temizle"
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,6 +12,8 @@ dependencies = [
   "Pillow>=10",
   "imageio-ffmpeg",
   "pyobjc-framework-Vision; sys_platform == 'darwin'",
+  "rapidocr>=3.4; sys_platform != 'darwin'",
+  "onnxruntime>=1.18; sys_platform != 'darwin'",
 ]
 
 [project.optional-dependencies]
