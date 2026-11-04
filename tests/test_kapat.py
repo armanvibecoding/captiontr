@@ -76,3 +76,33 @@ def test_rapidocr_motoru_yaziyi_okur():
     s = analiz.ocr(f, "rapid")
     assert any(analiz.benzer(x["metin"], "Hello world") > 0.8 for x in s), s
     x = s[0]; assert 150 < (x["y0"] + x["y1"]) / 2 < 240 and abs((x["x0"] + x["x1"]) / 2 - W / 2) < 20
+
+
+def test_satir_kutulari_1e1_birlesir_ve_emoji_payi():
+    # "QQ" gibi ayrı okunan emoji parçası aynı satıra katılır; sağ/sol emoji sayısı kadar kutu genişler
+    k = cevir.satir_kutulari_1e1([[100, 100, 300, 150], [90, 155, 280, 205], [290, 168, 320, 190]], [0, [1, 2]])
+    assert len(k) == 2
+    (a0, b0, a1, b1), (c0, d0, c1, d1) = k
+    assert a0 <= 97 and a1 >= 303 and b0 <= 97 and b1 >= 153          # 1. satır: yalnız pay
+    h = 50
+    assert c1 >= 280 + 2 * 1.05 * h and c0 <= 90 - 1.05 * h            # 2. satır: sağda 2, solda 1 emoji
+    assert d0 <= 155 and d1 >= 205
+
+
+def _yazi_kutusu(video):
+    f = kare(str(video / "kaynak.mp4"), 40); ys, xs = np.nonzero(cevir.beyaz(f[Y0:Y1]))
+    return [int(xs.min()) - 3, Y0 + int(ys.min()) - 3, int(xs.max()) + 4, Y0 + int(ys.max()) + 4]
+
+
+def test_satir_kutusu_yazi_kalkinca_kalkar(video):
+    # 1-1 satır kutusu: eski yazı görünürken tamamen örter, yazı kalktığı karede kalkar (geçiş payı yok)
+    ayar = {"kaynak": str(video / "kaynak.mp4"), "cikti": str(video / "TR_satir.mp4"), "bant": [Y0, Y1],
+            "altyazilar": [{"ornek_sn": 2.0, "bas": 1.0, "bit": 2.95, "kutular": [_yazi_kutusu(video)], "satirlar": ["."]}]}
+    a = str(video / "ayar_satir.json"); ortak.yaz_json(a, ayar)
+    cikti, _ = cevir.cevir(a)
+    for i in (20, 40, 59):
+        ortu, nokta = _ortulu(kare(ayar["kaynak"], i), kare(cikti, i))
+        assert ortu > 0.999 and nokta < 0.03, f"{i}. karede eski yazı açıkta: {ortu:.3f}"
+    for i in (17, 19, 60, 62):   # yazısız karelerde kutu yok: görüntü kaynakla aynı
+        fark = np.abs(kare(ayar["kaynak"], i)[Y0:Y1].astype(int) - kare(cikti, i)[Y0:Y1].astype(int)).mean()
+        assert fark < 6, f"{i}. karede yazı yokken kutu var (fark {fark:.1f})"
