@@ -1,7 +1,7 @@
 """captiontr — gömülü yazıları Türkçeleştir. Sıra: ekle → marka → analiz → cevir → dogrula → teslim"""
 import argparse, os, sys
 
-from . import analiz, cevir, indir, marka, ortak, sec
+from . import analiz, cevir, hook, indir, marka, ortak, sec
 
 
 def durum(proje):
@@ -14,6 +14,8 @@ def durum(proje):
         m = ortak.oku_json(os.path.join(k, ortak.META)) if os.path.exists(os.path.join(k, ortak.META)) else {}
         satir = [os.path.basename(k), f"[{m.get('marka') or 'marka yok'}]"]
         if m.get("teslim"): satir.append(f"✓teslim {m['teslim']}")
+        if m.get("kopya_adayi"): satir.append(f"⚠ kopya? ≈ {m['kopya_adayi']['klasor']}")
+        for x in m.get("benzer", []): satir.append(f"≈ ortak çekim {x['klasor']}")
         if os.path.exists(a):
             say["analiz"] += 1
             ay = ortak.oku_json(a)
@@ -56,12 +58,17 @@ def main():
     p = alt.add_parser("marka", help="videoları markaya bağla (yeni markada --urun gerekli)")
     p.add_argument("videolar", nargs="+", help="video klasör adları"); p.add_argument("--ad", required=True)
     p.add_argument("--urun", help="kısa ürün tanımı (yeni marka için)"); p.add_argument("--proje", default="is")
+    p = alt.add_parser("kopya", help="kopya şüphesi kararı: --evet (kenara taşı) ya da --hayir")
+    p.add_argument("video"); g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--evet", action="store_true"); g.add_argument("--hayir", action="store_true"); p.add_argument("--proje", default="is")
     p = alt.add_parser("markalar", help="kayıtlı markalar + markası atanmamış videolar")
     p.add_argument("proje", **IS)
     p = alt.add_parser("teslim", help="hazır videoları masaüstüne <Marka>/1.mp4, 2.mp4… + plan.csv")
     p.add_argument("proje", **IS); p.add_argument("--hedef", default=marka.VARSAYILAN_HEDEF)
     p.add_argument("--baslangic", help="YYYY-AA-GG (varsayılan: yarın)"); p.add_argument("--saat", default="18:00", help="ör. 18:00 ya da 10:00,18:00")
     p.add_argument("--gunluk", type=int, default=1, help="marka başına günde video")
+    p = alt.add_parser("hooklar", help="markanın kullanılmış hook'ları + diğer videolardaki yazı havuzu")
+    p.add_argument("proje", **IS); p.add_argument("--marka")
     p = alt.add_parser("indir", help="CSV/txt listedeki linkleri indir")
     p.add_argument("liste"); p.add_argument("hedef", **IS)
     p.add_argument("--cerez", metavar="TARAYICI", help="giriş gerekirse tarayıcı çerezi (ör. chrome)")
@@ -75,7 +82,7 @@ def main():
     p.add_argument("proje", **IS)
     p = alt.add_parser("temizle", help="video(lar)ın tüm metadata'sını sil ve doğrula")
     p.add_argument("yollar", nargs="+")
-    p = alt.add_parser("tekrar", help="aynı çekimi içeren (tekrar) videoları bul")
+    p = alt.add_parser("tekrar", help="aynı / kısaltılmış / ortak çekimli videoları bul")
     p.add_argument("proje", **IS)
     p = alt.add_parser("temas", help="her videodan 3 kare tek sayfada")
     p.add_argument("cikti"); p.add_argument("proje", **IS)
@@ -84,8 +91,10 @@ def main():
     a = ap.parse_args()
     if a.komut == "ekle": return 1 if marka.ekle(a.yollar, a.proje, a.cerez)[1] else 0
     if a.komut == "marka": marka.marka_ata(a.videolar, a.ad, a.urun, a.proje); return 0
+    if a.komut == "kopya": marka.kopya_karar(a.video, a.evet, a.proje); return 0
     if a.komut == "markalar": marka.markalar(a.proje); return 0
     if a.komut == "teslim": marka.teslim(a.proje, a.hedef, a.baslangic, a.saat, a.gunluk); return 0
+    if a.komut == "hooklar": hook.hooklar(a.proje, a.marka); return 0
     if a.komut == "indir": return indir.calistir(a.liste, a.hedef, a.cerez)
     if a.komut == "bilgi": return indir.bilgi_topla(a.liste, a.cikti)
     if a.komut == "analiz": return analiz.calistir(a.proje, a.zorla)

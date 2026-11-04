@@ -13,10 +13,14 @@ Klasörü Mac'te **Codex CLI**, Claude Code ya da Gemini CLI ile aç ve videolar
 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` asistanı [`docs/MASTER-PROMPT.md`](docs/MASTER-PROMPT.md)'deki çalışma
 sistemine bağlar:
 
-1. **Ürünü tanır, marka adını sorar.** Farklı ürünleri ayırır ("2 farklı ürün var, marka adları ne?"); sohbette
+1. **Kopyaları ayıklar.** Yeni gelen her video önceki tüm videolarla görüntüden karşılaştırılır: başka hesaptan,
+   başka kalitede, aynalanmış ya da başka yazıyla gelen aynı video tekrar hazırlanmaz.
+2. **Ürünü tanır, marka adını sorar.** Farklı ürünleri ayırır ("2 farklı ürün var, marka adları ne?"); sohbette
    sonradan yeni bir ürün gelirse "bu farklı bir ürün, marka adı ne?" der. Bilinen ürünü sormadan markasına ekler.
-2. Yazıları siler, Türkçesini aynı stilde basar, her videoyu kontrol eder.
-3. **Masaüstüne teslim eder:** `~/Desktop/CaptionTR/<Marka>/1.mp4, 2.mp4, 3.mp4…` + paylaşım planı `plan.csv`
+3. Yazıları siler, Türkçesini aynı stilde basar. **TikTok/Instagram yorum balonlarını** ("…'s comment'e yanıt") Türkçe
+   balonla değiştirir. **Her videoya farklı bir hook** yazar; aynı markada tekrar eden giriş render edilmez.
+4. Her videoyu kontrol eder.
+5. **Masaüstüne teslim eder:** `~/Desktop/CaptionTR/<Marka>/1.mp4, 2.mp4, 3.mp4…` + paylaşım planı `plan.csv`
    (tarih, saat, açıklama, hashtag). Numara ve takvim her teslimde kaldığı yerden devam eder.
 
 Kullanıcıya sorulan tek şey marka adıdır; teknik ayrıntı konuşulmaz.
@@ -29,23 +33,25 @@ cd captiontr && codex
 ## Komutlar
 
 ```
-ekle ──► marka ──► analiz ──► çeviri (asistan) ──► cevir ──► dogrula ──► teslim
+ekle (+kopya kontrolü) ──► marka ──► analiz ──► çeviri + hook (asistan) ──► cevir ──► dogrula ──► teslim
 ```
 
 | Adım | Komut | Sonuç |
 |---|---|---|
-| Ekle | `captiontr ekle <dosya/klasör/link…>` | Her video `is/<ad>-<kod>/kaynak.mp4` (metadata temiz) + `onizleme.jpg`; aynı dosya iki kez eklenmez |
+| Ekle | `captiontr ekle <dosya/klasör/link…>` | Her video `is/<ad>-<kod>/kaynak.mp4` (metadata temiz) + `onizleme.jpg`; aynı dosya iki kez eklenmez; kopya / ortak çekim kontrolü (aşağıda) |
+| Kopya kararı | `captiontr kopya <video> --evet\|--hayir` | Kopya şüphesi: `--evet` → `is/_kopyalar/`'a taşınır (silinmez), `--hayir` → işlenir |
 | Marka | `captiontr marka <video…> --ad Lumo --urun "gece lambası"` | Videoyu markaya bağlar; yeni marka `is/markalar.json`'a kaydedilir |
 | Markalar | `captiontr markalar` | Kayıtlı markalar + markası atanmamış videolar |
 | Analiz | `captiontr analiz` | OCR: yazılar, zamanları, satır kutuları, stil → taslak `ayar.json` + `tablo.png` |
-| Çeviri | `ayar.json` → `satirlar`, `gonderi` | Türkçe satırlar + paylaşım açıklaması, `"cevrildi": true` |
-| Render | `captiontr cevir` | Eski yazı silinir, yenisi basılır → `TR.mp4` + `TR_kontrol.png` |
+| Çeviri | `ayar.json` → `satirlar`, `yorumlar[].metin`, `gonderi` | Türkçe satırlar, yorum balonları, paylaşım açıklaması, `"cevrildi": true` |
+| Hook | `captiontr hooklar [--marka Lumo]` | Markada kullanılmış hook'lar + aynı ürünün diğer videolarındaki yazılar (fikir havuzu) |
+| Render | `captiontr cevir` | Eski yazı silinir, yenisi basılır, yorum balonu değişir → `TR.mp4` + `TR_kontrol.png`; hook'u aynı markada önceki bir videoyla %75+ benzeyen video atlanır |
 | Doğrulama | `captiontr dogrula` | Çıktıda eski yazıdan okunabilen iz var mı |
 | Teslim | `captiontr teslim [--baslangic 2026-12-01] [--saat 10:00,18:00]` | `~/Desktop/CaptionTR/<Marka>/N.mp4` + `plan.csv` (varsayılan: yarından itibaren marka başına günde 1, 18:00) |
 | Metadata | `captiontr temizle <dosya/klasör>` | Herhangi bir videonun metadata'sını siler, kalan izi raporlar |
 | Durum | `captiontr durum` | Hangi video hangi aşamada, markası, teslim yeri |
 | Toplu indirme | `captiontr indir liste.csv` · `captiontr bilgi liste.csv aday.csv` | CSV'den indirme · indirmeden izlenme/beğeni |
-| Tekrar avı | `captiontr tekrar` · `captiontr temas x.jpg` | Aynı çekimi içeren videolar (dHash) · kare kolajı |
+| Tekrar avı | `captiontr tekrar` · `captiontr temas x.jpg` | Alandaki tüm aynı / kısaltılmış / ortak çekimli çiftler · kare kolajı |
 
 Çalışma alanı varsayılan `is/`; başka bir klasör için komutun sonuna yolu yaz.
 
@@ -70,9 +76,11 @@ is/
   markalar.json              # marka → ürün tanımı + önizleme
   proje.json                 # tüm videolara ortak ayar (ör. son_yazi), isteğe bağlı
   <ad>-<kod>/
-    kaynak.mp4  meta.json  onizleme.jpg   # ekle (+ marka, teslim bilgisi meta.json'da)
+    kaynak.mp4  meta.json  onizleme.jpg   # ekle (+ marka, parmak izi, kopya/benzer, teslim bilgisi meta.json'da)
+    karsilastir_<diğer>.jpg               # kopya / ortak çekim şüphesinde yan yana kareler
     ayar.json   tablo.png                 # analiz (+ çeviri)
     TR.mp4      TR_kontrol.png            # cevir
+  _kopyalar/<ad>-<kod>/                # kopya olduğu onaylananlar (silinmez, aynı dosya/link yeniden alınmaz)
 ~/Desktop/CaptionTR/<Marka>/
   1.mp4  2.mp4  …  plan.csv               # teslim
 ```
@@ -96,6 +104,30 @@ Elle ezilebilen alanlar (`ayar.json`): `font_px`, `agirlik`, `kenar_px`, `font` 
 ```json
 {"son_yazi": {"metin": "Yorumlara “ÜRÜN” yaz, linkini göndereyim 📩", "sure": 2.5, "y_oran": 0.70}}
 ```
+
+## Kopya kontrolü
+
+`ekle` her yeni videonun görüntü parmak izini (saniyede 2 karenin 64 bitlik dHash'i + aynalanmışı; düz kareler hariç)
+çıkarır ve alandaki tüm videolarla karşılaştırır. Ölçüt: A'nın karelerinden B'de **aynı sırayla** yakın eşi
+(hamming ≤ 12) bulunanların oranı. Sıra şartı, tesadüfen benzeyen kareleri ve aynı sahnelerin başka kurgusunu eler.
+
+| Sonuç | Koşul | Ne olur |
+|---|---|---|
+| aynı | iki yönde de ≥ %80 | `KOPYA?` — karşılaştırma görseli üretilir, asistan bakıp karar verir; karar yokken teslim edilmez |
+| parça | tek yönde ≥ %80 | Kısaltılmış/uzatılmış hali — aynı muamele |
+| benzer | kısa olanın ≥ %35'i | Ortak çekim: işlenir, marka eşinden önerilir, `plan.csv → not` |
+
+Ayar 150 gerçek ürün videosuyla yapıldı (11.175 çift). Eşik 10 olunca küçültülmüş, kırpılmış ve aynalanmış yeniden
+yüklemelerin yarısı kaçıyor; 14 olunca farklı ürünler eşleşmeye başlıyor. 12'de gözle bakılan "aynı" çiftlerin hepsi
+farklı yazıyla yeniden paylaşılmış aynı çekimdi; "benzer" çiftler aynı çekimin girişi farklı kurgularıydı.
+
+## Yorum balonları
+
+TikTok/Instagram'daki "X'in yorumuna yanıt" çıkartması `analiz` sırasında başlık satırından ("Reply to …'s comment")
+tanınır ve altyazıdan ayrılır (`ayar.json → yorumlar[]`). Balonun sınırı karede beyaz zeminden ölçülür (avatar dahil),
+giriş ve çıkış anı kare kare bulunur. `cevir` eski balonu tamamen örten opak bir balon çizer: Türkçe başlık
+("<kullanıcı> adlı kullanıcının yorumuna yanıt"), Türkçe yorum ve emoji. Altında silme yapılmadığı için iz kalmaz.
+Kullanıcı adı orijinal kalır; profil resmi yerine nötr gri daire basılır.
 
 ## Silme yöntemleri
 
@@ -141,6 +173,8 @@ Döndürme bilgisi (`displaymatrix`) olan video temizlenmez, hata verir — temi
 - Ekranın uzak iki yerindeki eş zamanlı yazılar tek bant varsayımını bozar (analiz uyarır).
 - Yazı el, yüz ya da hızlı hareket eden bir şeyin üstündeyse hiçbir yöntem kusursuz silmez → `kapak`.
 - Ekrandaki filigranlara dokunulmaz.
+- Yorum balonu başlık kalıbından tanınır (EN/TR/ES/DE "reply to … 's comment" biçimleri); tanınmayan balonu asistan
+  `yorumlar[]`'a elle ekler. Kopya kontrolü görüntüye bakar, sese bakmaz.
 
 ## Sorumlu kullanım
 

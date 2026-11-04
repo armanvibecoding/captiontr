@@ -26,7 +26,8 @@ def kontrol_et(klasor):
     ayar = ortak.oku_json(os.path.join(klasor, ortak.AYAR))
     cikti = ayar["cikti"]
     if not os.path.exists(cikti): return None
-    orijinal = [s for a in ayar.get("altyazilar", []) for s in a.get("orijinal", [])]
+    orijinal = [s for a in ayar.get("altyazilar", []) for s in a.get("orijinal", [])] \
+        + [s for y in ayar.get("yorumlar", []) for s in (y.get("orijinal") or []) + [y.get("orijinal_baslik", "")] if s]
     if not orijinal: return []
     b = ortak.bilgi(ayar["kaynak"]); sure = b["n"] / b["fps"]
     anlar = [round(i * ADIM_SN, 2) for i in range(int(sure / ADIM_SN))]

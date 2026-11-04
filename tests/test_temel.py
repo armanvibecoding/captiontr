@@ -95,13 +95,10 @@ def test_metadata_temizligi(video):
 
 
 def test_tekrar_tespiti(video):
-    from captiontr import sec
-    a = sec.parmak_izi(str(video / "kaynak.mp4"))
-    b = sec.parmak_izi(str(video / "TR.mp4"))          # aynı çekim, farklı altyazı
-    assert sec.benzerlik(a, b) >= sec.ORTAK_PAY
-    rng = np.random.default_rng(0)                      # bambaşka görüntü
-    c = np.array([sec.dhash(rng.integers(0, 255, (64, 36, 3), dtype=np.uint8)) for _ in range(4)])
-    assert sec.benzerlik(a, c) < sec.ORTAK_PAY
+    from captiontr import aynilik
+    a = aynilik.parmak_izi(str(video / "kaynak.mp4"))
+    b = aynilik.parmak_izi(str(video / "TR.mp4"))      # aynı çekim, farklı yazı
+    assert aynilik.karsilastir(a, b)[0] == "aynı"
 
 
 def kutulu_bas(f, satirlar):

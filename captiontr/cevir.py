@@ -434,6 +434,58 @@ def son_yazi_katmani(cfg, W, H):
     return katman_ciz(satirlar, stil, W, H)
 
 
+YORUM_BASLIK = {"tiktok": "{k} adlı kullanıcının yorumuna yanıt", "instagram": "@{k} adlı kullanıcıya yanıt"}
+
+
+def _sar(d, metin, font, eh, sinir):
+    satirlar, simdi = [], ""
+    for kelime in metin.split():
+        aday = (simdi + " " + kelime).strip()
+        if simdi and _genislik(d, emoji_kumeleri(aday), font, eh) > sinir: satirlar.append(simdi); simdi = kelime
+        else: simdi = aday
+    return satirlar + ([simdi] if simdi else [])
+
+
+def yorum_katmani(y, W, H):
+    """TikTok/Instagram yoruma-yanıt balonu: eski balonu TAMAMEN örten opak beyaz balon + Türkçe başlık/yorum.
+    y: kutu [x0,y0,x1,y1] (eski balon), platform, kullanici, metin, (baslik), govde_px."""
+    x0, y0, x1, y1 = y["kutu"]
+    fp = max(10, int(y.get("font_px") or round(y.get("govde_px", 0.036 * W) * 0.9)))   # OCR satır kutusu ≈ 1,1 × font
+    ig = y.get("platform") == "instagram"
+    fb = font_ac(int(fp * 0.82) * SS, 450); fy = font_ac(fp * SS, y.get("agirlik", 550))
+    eh, ehb = int(fp * SS * 1.05), int(fp * 0.82 * SS * 1.05)
+    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    baslik = y.get("baslik") or YORUM_BASLIK["instagram" if ig else "tiktok"].format(k=y.get("kullanici") or "kullanıcı")
+    pad = 0.55 * fp; av = 0 if ig else 2.1 * fp
+    sinir = (0.9 * W - 2 * pad - av - (0.45 * fp if av else 0)) * SS
+    govde = _sar(d0, y["metin"], fy, eh, sinir)
+    bas_g = _genislik(d0, emoji_kumeleri(baslik), fb, ehb) / SS
+    if bas_g * SS > sinir:   # başlık sığmıyorsa kısalır
+        while baslik and _genislik(d0, emoji_kumeleri(baslik + "…"), fb, ehb) > sinir: baslik = baslik[:-1]
+        baslik += "…"; bas_g = _genislik(d0, emoji_kumeleri(baslik), fb, ehb) / SS
+    ic_w = max([bas_g] + [_genislik(d0, emoji_kumeleri(g), fy, eh) / SS for g in govde])
+    ic_h = 1.25 * fp * 0.82 + 1.3 * fp * len(govde)
+    gw = max(x1 - x0 + 4, ic_w + 2 * pad + av + (0.45 * fp if av else 0))
+    gh = max(y1 - y0 + 4, ic_h + 2 * pad)
+    bx0 = min(max(0, x0 - 2), W - gw); by0 = max(0, y0 - 2)
+    if bx0 < 0: bx0 = 0
+    img = Image.new("RGBA", (int(gw * SS) + 2, int(gh * SS) + 2), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, gw * SS, gh * SS], radius=0.5 * fp * SS, fill=tuple(y.get("renk", (255, 255, 255))) + (255,))
+    ust = (gh - ic_h) / 2
+    tx = pad + (av + 0.45 * fp if av else 0)
+    if av:
+        cy = ust + ic_h / 2
+        d.ellipse([pad * SS, (cy - av / 2) * SS, (pad + av) * SS, (cy + av / 2) * SS], fill=(196, 196, 200, 255))
+    _parcalar_ciz(d, img, emoji_kumeleri(baslik), tx * SS, (ust + 0.62 * fp * 0.82) * SS, fb, ehb,
+                  (0, 0, 0, 255) if ig else (120, 120, 128, 255), 0)
+    for i, g in enumerate(govde):
+        _parcalar_ciz(d, img, emoji_kumeleri(g), tx * SS, (ust + 1.25 * fp * 0.82 + (i + 0.5) * 1.3 * fp) * SS, fy, eh,
+                      (22, 22, 24, 255), 0)
+    k = np.asarray(img.resize((int(gw) + 1, int(gh) + 1), Image.LANCZOS)).astype(np.float32)
+    k = k[:H - int(by0), :W - int(bx0)]
+    return (int(bx0), int(by0), k[..., 2::-1].copy(), k[..., 3:4] / 255.0)
+
+
 def bindir(o, katman):
     x0, y0, rgb, al = katman
     hh, ww = rgb.shape[:2]
@@ -645,7 +697,10 @@ def cevir(ayar_yol):
     ayar = ayar_yukle(ayar_yol)
     alt = ayar.get("altyazilar") or []
     son = ayar.get("son_yazi") if (ayar.get("son_yazi") or {}).get("metin") else None
-    if not alt and not son: raise RuntimeError("ne altyazı ne son_yazi var")
+    yorumlar = ayar.get("yorumlar") or []
+    if not alt and not son and not yorumlar: raise RuntimeError("ne altyazı ne son_yazi ne yorum var")
+    for y in yorumlar:
+        if not (y.get("metin") or "").strip(): raise RuntimeError("yorum balonunun Türkçe metni (metin) boş")
     for k, a in enumerate(alt):
         if not a.get("satirlar"): raise RuntimeError(f"{k}. yazının çevirisi (satirlar) boş")
     video, cikti = ayar["kaynak"], ayar["cikti"]
@@ -653,7 +708,11 @@ def cevir(ayar_yol):
     Y0, Y1 = ayar.get("bant") or (0, 1)
     tur = ayar.get("stil", "kenarli")
 
-    etiket, maske, katman, sil, kare_maske = yazilari_hazirla(ayar)
+    if alt: etiket, maske, katman, sil, kare_maske = yazilari_hazirla(ayar)
+    else: etiket, maske, katman, sil, kare_maske = [-1] * b["n"], {}, {}, {}, {}
+    yk = [(int(y["bas"] * FPS), int(np.ceil(y["bit"] * FPS)), yorum_katmani(y, W, H), y) for y in yorumlar]
+    for a0, a1, _, y in yk: print(f"  yorum balonu: {a0 / FPS:.2f}–{a1 / FPS:.2f} sn  «{y['metin']}»")
+    yorum_kontrol = {}
 
     son_bas, son_katman = b["n"] + 1, None
     if son:
@@ -684,7 +743,8 @@ def cevir(ayar_yol):
         k = etiket[i] if i < len(etiket) else -2
         ms = kare_maskesi(sil, maske, kare_maske, i)
         o = f
-        if ms is not None or i >= son_bas: o = f.copy()
+        yorum_var = [z for z in yk if z[0] <= i < z[1]]
+        if ms is not None or i >= son_bas or yorum_var: o = f.copy()
         if ms is not None:
             m, r0, r1 = ms
             if i in dolgu: o[Y0:Y1] = cv2.imdecode(dolgu[i], cv2.IMREAD_COLOR)
@@ -693,6 +753,12 @@ def cevir(ayar_yol):
             temiz = o[Y0:Y1].copy() if i in kontrol_i else None
             bindir(o, katman[k])
             if temiz is not None: kontrol[kontrol_i[i]] = np.hstack([f[Y0:Y1], temiz, o[Y0:Y1]])
+        for j, (a0, a1, kat, y) in enumerate(yk):
+            if a0 <= i < a1:
+                bindir(o, kat)
+                if j not in yorum_kontrol and i >= (a0 + a1) // 2:
+                    x0, y0 = kat[0], kat[1]; hh, ww = kat[2].shape[:2]
+                    yorum_kontrol[j] = np.hstack([f[y0:y0 + hh, x0:x0 + ww], o[y0:y0 + hh, x0:x0 + ww]])
         if i >= son_bas:
             bindir(o, son_katman)
             if son_kontrol is None and i >= son_bas + int(FPS / 2): son_kontrol = o.copy()
@@ -704,6 +770,10 @@ def cevir(ayar_yol):
     kp = os.path.splitext(cikti)[0] + "_kontrol.png"
     olcek = 2 if W < 800 else 1
     parcalar = [cv2.resize(kontrol[k], None, fx=olcek, fy=olcek) for k in sorted(kontrol)]
+    parcalar += [cv2.resize(yorum_kontrol[j], None, fx=olcek, fy=olcek) for j in sorted(yorum_kontrol)]   # eski | yeni balon
+    if parcalar and son_kontrol is None:
+        gen = max(x.shape[1] for x in parcalar)
+        parcalar = [cv2.copyMakeBorder(x, 0, 4, 0, gen - x.shape[1], cv2.BORDER_CONSTANT) for x in parcalar]
     if son_kontrol is not None:   # son yazının olduğu tam kare (küçültülmüş)
         sk = cv2.resize(son_kontrol, (W * olcek // 3, H * olcek // 3))
         gen = max([x.shape[1] for x in parcalar] + [sk.shape[1]])
@@ -726,10 +796,17 @@ def calistir(hedef, zorla=False):
         try:
             ayar = ayar_yukle(a)
             alt = ayar.get("altyazilar") or []
-            if not all(x.get("satirlar") for x in alt) or (not alt and not (ayar.get("son_yazi") or {}).get("metin")):
+            yor = ayar.get("yorumlar") or []
+            if not all(x.get("satirlar") for x in alt) or not all((y.get("metin") or "").strip() for y in yor) \
+                    or (not alt and not yor and not (ayar.get("son_yazi") or {}).get("metin")):
                 print(f"{ad:40} atlandı (çeviri eksik)"); continue
             if ayar.get("cevrildi") is not True:
                 print(f"{ad:40} atlandı (cevrildi: true işaretli değil)"); continue
+            from . import hook
+            t = hook.tekrar_eden(os.path.dirname(os.path.abspath(a)), ayar)
+            if t and not ayar.get("hook_tekrar_izin"):
+                print(f"{ad:40} atlandı (hook tekrarı %{t[0] * 100:.0f}: «{hook.hook(ayar)}» ≈ {os.path.basename(t[1])} «{t[2]}» — farklı giriş yaz)")
+                hata += 1; continue
             c = ayar["cikti"]
             if not zorla and os.path.exists(c) and os.path.getmtime(c) > os.path.getmtime(a):
                 print(f"{ad:40} atlandı (güncel)"); continue

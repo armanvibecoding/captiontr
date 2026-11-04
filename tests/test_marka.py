@@ -1,7 +1,7 @@
 """Marka sistemi: ekle → marka → teslim (numara ve plan kaldığı yerden devam eder)."""
 import csv, datetime as dt, os, shutil, subprocess
 
-import numpy as np, pytest
+import cv2, numpy as np, pytest
 
 from captiontr import marka, ortak
 
@@ -10,8 +10,10 @@ def _video(yol, renk, n=20):
     ff = subprocess.Popen([ortak.ffmpeg(), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", "180x320",
                            "-r", "10", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                            "-metadata", "comment=ZZZ-iz", yol], stdin=subprocess.PIPE)
+    rng = np.random.default_rng(renk[0] * 65536 + renk[1] * 256 + renk[2])   # her video kendi görüntüsü (kopya kontrolü bunları ayırmalı)
+    doku = cv2.resize(rng.integers(0, 255, (12, 7, 3), dtype=np.uint8), (180, 340), interpolation=cv2.INTER_CUBIC)
     for i in range(n):
-        f = np.full((320, 180, 3), renk, np.uint8); f[i * 10 % 300:i * 10 % 300 + 20] = 255
+        f = doku[i % 20:i % 20 + 320].copy(); f[i * 10 % 300:i * 10 % 300 + 20] = 255
         ff.stdin.write(f.tobytes())
     ff.stdin.close(); assert ff.wait() == 0
     return yol
