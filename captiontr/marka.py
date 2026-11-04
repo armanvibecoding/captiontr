@@ -99,7 +99,7 @@ def _girdiler(yollar):
 
 def _ad(k):
     m = ortak.oku_json(os.path.join(k, ortak.META)) if os.path.exists(os.path.join(k, ortak.META)) else {}
-    return m.get("teslim") or os.path.basename(k)
+    return (m.get("teslim") or os.path.basename(k)).replace("\\", "/")   # eski Windows kayıtları da / ile
 
 
 def kopya_kontrol(klasor, proje="is"):
@@ -280,7 +280,7 @@ def teslim(proje="is", hedef=VARSAYILAN_HEDEF, baslangic=None, saat="18:00", gun
                      "kaynak": m.get("url") or os.path.basename(m.get("kaynak_dosya", "")),
                      "not": "; ".join(f"{_ad(os.path.join(proje, x['klasor']))} ile ortak çekim" for x in m.get("benzer", []))}
             plan.append(satir)
-            m["teslim"] = os.path.join(marka, ad); ortak.yaz_json(os.path.join(k, ortak.META), m)
+            m["teslim"] = f"{marka}/{ad}"; ortak.yaz_json(os.path.join(k, ortak.META), m)
             teslim_edilen.append(yol)
             print(f"{marka}/{ad}  {satir['tarih']} {satir['saat']}  ← {os.path.basename(k)}" + (f"  ⚠ metadata: {kalan}" if kalan else ""))
             sira_gun += 1
