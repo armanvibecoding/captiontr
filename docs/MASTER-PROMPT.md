@@ -79,6 +79,10 @@ planlı teslim et.
 2. Her video için `tablo.png`'yi aç: okunan metni doğrula (tırnak/emoji yanlış okunur: `gift™` = `gift”`),
    **emojileri** görselden oku. `altyazilar[].satirlar` alanını Türkçe ile doldur (§4 hook, §5 çeviri), `"cevrildi": true` yaz.
    Ayrıca `"gonderi": {"aciklama": "...", "hashtag": "..."}` yaz (paylaşım açıklaması, §5).
+   **Emoji payı:** her yazıya `"emoji"` yaz — satır başına SAĞDAKİ emoji sayısı, solda da varsa `[sol, sağ]`
+   (tırnak ≈ 0.5). Ör. `"emoji": [0, 2]`, `"emoji": [[1, 0], [0, 0.5]]`. Siyah kutu okunan satırın tam yerinde ve
+   boyundadır; emojiler okunmadığı için kutu bu sayı kadar genişler. Yazmazsan emojiler kutunun dışında kalır.
+   Okuyucunun emojiyi "QQ", "@" diye ayrı parça okuması sorun değil; aynı satıra katılır.
    **Yorum balonu** (TikTok/Instagram "…'s comment'e yanıt" çıkartması): analiz bunları `yorumlar[]` olarak ayrı bulur
    (`orijinal_baslik`, `orijinal`, `kullanici`, balonun kutusu, kare kare kesin giriş/çıkış). Doldur:
    - `metin`: yorumun Türkçesi. Gerçek bir Türk kullanıcının yazacağı gibi kısa ve doğal ("bu kalın saçta da oluyor mu?").

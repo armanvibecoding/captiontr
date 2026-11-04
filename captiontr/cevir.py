@@ -414,9 +414,65 @@ def katman_ciz(satirlar, stil, W, H):
     return (int(b0), int(y_bas + a0), k[..., 2::-1].copy(), k[..., 3:4] / 255.0)
 
 
+def satir_kutulari_1e1(kutular, emoji):
+    """Okunan dikdörtgenler → orijinal satır başına bir kutu. Dikeyde çakışan dikdörtgenler (emojinin ayrı okunan
+    parçası, ör. "QQ") aynı satırdır, birleşir. emoji[j]: satırın SAĞINDAKİ emoji sayısı ya da [sol, sağ]
+    (tırnak işareti ≈ 0.5); kutu metin dikdörtgeninden o kadar genişler."""
+    satirlar = []
+    for q in sorted(kutular, key=lambda q: q[1]):
+        for g in satirlar:
+            ust = max(g["y0"], q[1]); alt_ = min(g["y1"], q[3])
+            if alt_ - ust > 0.5 * min(g["y1"] - g["y0"], q[3] - q[1]): g["parca"].append(q); break
+        else: satirlar.append({"y0": q[1], "y1": q[3], "parca": [q]})
+    kk = []
+    for j, g in enumerate(satirlar):
+        metin = max(g["parca"], key=lambda q: q[2] - q[0])   # en geniş parça = metin
+        x0, x1 = min(q[0] for q in g["parca"]), max(q[2] for q in g["parca"])
+        y0, y1 = min(q[1] for q in g["parca"]), max(q[3] for q in g["parca"])
+        h = metin[3] - metin[1]; e = emoji[j] if j < len(emoji) else 0
+        sol, sag = (e if isinstance(e, (list, tuple)) else (0, e))
+        if sol: x0 = min(x0, metin[0] - sol * 1.05 * h - 0.1 * h)
+        if sag: x1 = max(x1, metin[2] + sag * 1.05 * h + 0.1 * h)
+        p2 = max(3, round(0.06 * h))
+        kk.append((int(x0) - p2, y0 - p2, int(x1) + p2, y1 + p2))
+    return kk
+
+
+def katman_1e1(satirlar, stil, W, H):
+    """Siyah kutular orijinal satırların tam yerinde ve boyunda; yeni yazı her kutuda ortalı, orijinal font boyunda
+    (en uzun satır kutusuna sığmazsa tüm satırlar birlikte küçülür). Orijinalden fazla satır son kutunun altına eklenir."""
+    kut = [list(q) for q in stil["kutular_1e1"]]
+    while len(kut) < len(satirlar):   # fazla satır: son kutunun aralığıyla alta
+        x0, y0, x1, y1 = kut[-1]; ad = (y1 - kut[-2][3]) if len(kut) > 1 else (y1 - y0) + 4
+        kut.append([x0, y0 + ad, x1, y1 + ad])
+    kut = kut[:len(satirlar)] if len(satirlar) < len(kut) else kut
+    if len(satirlar) < len(stil["kutular_1e1"]):   # az satır: son kutu kalan orijinal satırları da örter
+        kut[-1] = [min(q[0] for q in stil["kutular_1e1"][len(satirlar) - 1:]), kut[-1][1],
+                   max(q[2] for q in stil["kutular_1e1"][len(satirlar) - 1:]), stil["kutular_1e1"][-1][3]]
+    fp = stil["font_px"]; ag = stil.get("agirlik", 600)
+    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    for _ in range(30):   # en dar orana göre ortak font
+        font = font_ac(fp * SS, ag, stil.get("font"), stil.get("egik", 0)); eh = int(fp * SS * 1.05)
+        tasma = max(_genislik(d0, emoji_kumeleri(s), font, eh) / SS / max(1, (q[2] - q[0]) - 0.5 * fp) for s, q in zip(satirlar, kut))
+        if tasma <= 1 or fp <= 10: break
+        fp = max(10, int(fp / tasma))
+    y_bas = max(0, min(q[1] for q in kut) - 2); y_son = min(H, max(q[3] for q in kut) + 2)
+    img = Image.new("RGBA", (W * SS, (y_son - y_bas) * SS), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
+    for i, (x0, y0, x1, y1) in enumerate(kut):   # kutular (bitişik satırlar arasında boşluk kalmasın)
+        y1b = kut[i + 1][1] if i + 1 < len(kut) and kut[i + 1][1] - y1 < 0.25 * fp else y1
+        d.rounded_rectangle([max(0, x0) * SS, (y0 - y_bas) * SS, min(W, x1) * SS, (y1b - y_bas) * SS],
+                            radius=0.22 * (y1 - y0) * SS, fill=tuple(stil.get("kutu_renk", (0, 0, 0))) + (int(255 * stil.get("kutu_alfa", 1)),))
+    renk = tuple(stil.get("yazi_renk", (255, 255, 255))) + (255,)
+    for s, (x0, y0, x1, y1) in zip(satirlar, kut):
+        parca = emoji_kumeleri(s); gen = _genislik(d, parca, font, eh)
+        _parcalar_ciz(d, img, parca, (x0 + x1) / 2 * SS - gen / 2, ((y0 + y1) / 2 - y_bas) * SS, font, eh, renk, 0)
+    k = np.asarray(img.resize((W, y_son - y_bas), Image.LANCZOS)).astype(np.float32)
+    return (0, int(y_bas), k[..., 2::-1].copy(), k[..., 3:4] / 255.0)
+
+
 def son_yazi_katmani(cfg, W, H):
     """Videonun sonuna çağrı yazısı (CTA): siyah kutu, beyaz yazı, ortalı. Çok uzunsa kelimeden 2+ satıra böler."""
-    fp = int(cfg.get("font_oran", 0.042) * W)
+    fp = int(cfg.get("font_oran", 0.058) * W)   # 0.042 siyah tulum üstünde okunmuyordu (2026-11-04 ölçüldü)
     font = font_ac(fp, cfg.get("agirlik", 700))
     sinir = 0.84 * W - 2 * 0.45 * fp
     satirlar, simdi = [], ""
@@ -655,6 +711,14 @@ def yazilari_hazirla(ayar):
         sil, kare_maske = gecis_ve_kare_maskeleri(etiket, maske, beyazlar, kisitlar, kalinlik, gecis, W)
         for k in range(len(alt)):
             stil = stiller[k]
+            if kapat and ayar.get("kapat_kutu", "satir") == "satir" and alt[k].get("kutular") and stil["tur"] == "kenarli":
+                # (orijinali beyaz kutulu yazıda beyaz kutu satır dikdörtgeninden geniş: tek büyük kutu — kapat_stili)
+                # satır başına 1-1 kutu: orijinal satırın yeri ve boyu (+ emoji payı), yazı orijinal boyda
+                stil = dict(stil, kutular_1e1=satir_kutulari_1e1(alt[k]["kutular"] + (alt[k].get("ek_kutular") or []),
+                                                                alt[k].get("emoji") or []),
+                            kutu_renk=(0, 0, 0), kutu_alfa=1.0, yazi_renk=(255, 255, 255))
+                katman[k] = katman_1e1(alt[k]["satirlar"], stil, W, H)
+                continue
             if kapat: stil = kapat_stili(stil, alt[k], k, maske, sil, kare_maske, Y0)
             katman[k] = katman_ciz(alt[k]["satirlar"], stil, W, H)
 
@@ -722,6 +786,72 @@ def kare_maskesi(sil, maske, kare_maske, i):
     return maske[k]
 
 
+def _koyu(b):
+    return cv2.cvtColor(b, cv2.COLOR_BGR2HSV)[..., 2] < 80
+
+
+def gorunurluk(video, alt, sil, FPS, etiket=None):
+    """silme yok: {kare: yazı no} — eski yazının o karede gerçekten göründüğü kareler.
+    İki şablon (örnek andaki satır dikdörtgenlerinden): beyaz harf pikselleri ve harflerin siyah kenarı.
+    oran = şablonun karede hâlâ beyaz/koyu olan payı. Yazılı (medyan) ve yazısız (en düşük) seviyeyi en iyi
+    ayıran şablon seçilir; eşik aradaki %20'de. İlk ve son eşik-üstü kare arasındaki her kare dahil.
+    Hiçbiri ayıramıyorsa (fark < 0.15) güvenli taraf: yazının eşleştiği kareler + geçiş payı (sil)."""
+    goster = {}
+    ilgili = {i for i, k in enumerate(sil) if k >= 0}
+    if not ilgili: return goster
+    pay = int(FPS * 0.5); bas, son = max(0, min(ilgili) - pay), max(ilgili) + pay
+    sablon = {}
+    cekirdek = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    for k, a in enumerate(alt):
+        ii = [i for i, kk in enumerate(etiket if etiket is not None else sil) if kk == k]
+        ornek_i = int(a["ornek_sn"] * FPS) if "ornek_sn" in a else (ii[len(ii) // 2] if ii else None)
+        if ornek_i is None: continue
+        ref = ref_kareler(video, [ornek_i])
+        if not ref or not a.get("kutular"): continue
+        f = next(iter(ref.values())); sablon[k] = []
+        for q in a["kutular"]:
+            parca = f[q[1]:q[3], q[0]:q[2]]; w = beyaz(parca)
+            kenar = _koyu(parca) & (cv2.dilate(w.astype(np.uint8), cekirdek) > 0)
+            sablon[k].append((q, w, kenar))
+    oran = {}
+    for i, f in ortak.kareler(video):
+        if i < bas: continue
+        if i > son: break
+        k = sil[i] if i < len(sil) else -2
+        kk = k if k >= 0 else next((sil[j] for j in range(max(0, i - pay), min(len(sil), i + pay)) if sil[j] >= 0), -1)
+        if kk not in sablon: continue
+        tw = sum(int(w.sum()) for _, w, _ in sablon[kk]) or 1; tk = sum(int(e.sum()) for _, _, e in sablon[kk]) or 1
+        vw = vk = 0
+        for q, w, e in sablon[kk]:
+            parca = f[q[1]:q[3], q[0]:q[2]]; vw += int((beyaz(parca) & w).sum()); vk += int((_koyu(parca) & e).sum())
+        oran[i] = (kk, vw / tw, vk / tk)
+    for k in sablon:
+        r = {i: v for i, v in oran.items() if v[0] == k}
+        if not r: continue
+        ic = [i for i in r if i < len(sil) and sil[i] == k] or list(r)
+        en_iyi = None
+        for j, ad in ((1, "beyaz"), (2, "kenar")):
+            p = float(np.median([r[i][j] for i in ic])); b = min(v[j] for v in r.values())
+            if en_iyi is None or p - b > en_iyi[0]: en_iyi = (p - b, j, ad, b + 0.2 * (p - b))
+        fark, j, ad, esik = en_iyi
+        if fark < 0.15:
+            for i, kk in enumerate(sil):
+                if kk == k: goster[i] = k
+            print(f"  yazı {k}: görünürlük ölçülemedi, yazının eşleştiği kareler + geçiş payı kullanıldı")
+            continue
+        ust = [i for i, v in r.items() if v[j] >= esik]
+        for i in range(min(ust), max(ust) + 1): goster[i] = k
+        print(f"  yazı {k}: görünür kareler {min(ust) / FPS:.2f}–{(max(ust) + 1) / FPS:.2f} sn ({ad} şablonu, fark %{fark * 100:.0f})")
+    for k in range(len(alt)):   # ölçülemeyen yazı (satır kutusu yok): yazının eşleştiği kareler + geçiş payı
+        if k not in sablon:
+            for i, kk in enumerate(sil):
+                if kk == k: goster[i] = k
+    for k, a in enumerate(alt):   # yazı okumanın eski yazıyı gördüğü aralık her durumda örtülür (baştaki/sondaki kaçak kareler)
+        if "bas" not in a or "bit" not in a: continue
+        for i in range(int(a["bas"] * FPS), min(len(sil), int(a["bit"] * FPS) + 1)): goster.setdefault(i, k)
+    return goster
+
+
 def cevir(ayar_yol):
     ayar = ayar_yukle(ayar_yol)
     alt = ayar.get("altyazilar") or []
@@ -755,6 +885,18 @@ def cevir(ayar_yol):
     # 1,5. geçiş: yazının altındaki gerçek arka planı başka karelerden getir (doldurulamayan = TELEA)
     dolgu, oran = {}, {}
     kapat = yazi_yontemi(ayar) == "kapat"
+    goster = {}
+    if alt and kapat:
+        for k in range(len(alt)):   # örtme denetimi: eski yazının okunan satır dikdörtgenlerinden kutu dışında kalan
+            x0, y0, _, al = katman[k]; hh, ww = al.shape[:2]
+            ort = np.zeros((H, W), bool); ort[y0:y0 + hh, x0:x0 + ww] = al[..., 0] > 0.95
+            ocr = np.zeros((H, W), bool)
+            for kx0, ky0, kx1, ky1 in (alt[k].get("kutular") or []) + (alt[k].get("ek_kutular") or []):
+                ocr[max(0, ky0 + 2):ky1 - 2, max(0, kx0 + 2):kx1 - 2] = True
+            acik = int((ocr & ~ort).sum())
+            print(f"  yazı {k}: kutu dışında kalan eski yazı alanı: {acik} piksel")
+            if acik > 80: print(f"  UYARI yazı {k}: eski yazının bir kısmı kutunun dışında")
+        goster = gorunurluk(video, alt, sil, FPS, etiket)
     if alt and not kapat and ayar.get("silme", "zamansal") == "zamansal":
         from . import doldur
         dolgu, oran = doldur.hazirla(video, sil, maske, Y0, Y1, kare_maske)
@@ -774,8 +916,8 @@ def cevir(ayar_yol):
     kontrol, son_kontrol = {}, None
     for i, f in ortak.kareler(video):
         k = etiket[i] if i < len(etiket) else -2
-        if kapat:   # silme yok: eski yazının göründüğü her karede (geçişler dahil) opak kutu basılır
-            k = sil[i] if i < len(sil) else -2; ms = None
+        if kapat:   # silme yok: opak kutu yalnız eski yazının gerçekten göründüğü karelerde (bkz. gorunurluk)
+            k = goster.get(i, -2); ms = None
         else: ms = kare_maskesi(sil, maske, kare_maske, i)
         o = f
         yorum_var = [z for z in yk if z[0] <= i < z[1]]
